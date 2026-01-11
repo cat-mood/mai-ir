@@ -1,0 +1,26 @@
+# Fallout Wiki Crawler Configuration
+
+# Database configuration
+db:
+  host: "mongodb"  # Use "mongodb" for Docker Compose, "localhost" for local development
+  port: 27017
+  database: "fallout_wiki"
+  username: null  # Optional: set if MongoDB requires authentication
+  password: null  # Optional: set if MongoDB requires authentication
+
+# Crawler logic configuration
+logic:
+  delay_seconds: 1.0          # Delay between page fetches (be respectful to the server)
+  recrawl_age_days: 30        # Re-crawl pages older than this many days
+  user_agent: "FalloutWikiCrawler/1.0"  # User agent string for requests
+  max_retries: 3              # Maximum number of retries for failed requests
+  timeout_seconds: 30         # Request timeout in seconds
+
+# Crawler-specific settings
+crawler:
+  start_url: "https://fallout.fandom.com/wiki/Special:Categories"
+  domain_whitelist:
+    - "fallout.fandom.com"    # Only crawl URLs from this domain
+
+
+

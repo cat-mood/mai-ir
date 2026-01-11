@@ -1,0 +1,25 @@
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info
+dist
+build
+.git
+.gitignore
+.env
+venv
+env
+*.md
+README.md
+.DS_Store
+.vscode
+.idea
+*.log
+Categories _ Fallout Wiki _ Fandom.html
+
+
+

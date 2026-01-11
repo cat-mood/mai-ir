@@ -1,0 +1,43 @@
+services:
+  # MongoDB database
+  mongodb:
+    image: mongo:7.0
+    container_name: fallout_wiki_mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    environment:
+      - MONGO_INITDB_DATABASE=fallout_wiki
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - crawler_network
+
+  # Fallout Wiki Crawler
+  crawler:
+    build: .
+    container_name: fallout_wiki_crawler
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+    networks:
+      - crawler_network
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
+
+volumes:
+  mongodb_data:
+    driver: local
+
+networks:
+  crawler_network:
+    driver: bridge
+
