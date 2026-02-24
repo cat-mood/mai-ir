@@ -1,0 +1,49 @@
+# Database configuration
+db:
+  host: "mongodb"
+  port: 27017
+  database: "fallout_wiki"
+  username: null
+  password: null
+
+# Crawler logic configuration
+logic:
+  delay_seconds: 3.0          # Delay between page fetches
+  recrawl_age_days: 30        # Re-crawl pages older than this many days
+  user_agent: "rotate"        # Use "rotate" for User-Agent rotation
+  max_retries: 3              # Maximum number of retries for failed requests
+  timeout_seconds: 30         # Request timeout in seconds
+  captcha_wait_minutes: 10    # Minutes to wait after CAPTCHA detection
+
+# Crawler-specific settings
+crawler:
+  crawler_id: "bethesda_crawler"        # Unique ID for this crawler
+  source_name: "Bethesda Fallout"       # Human-readable source name
+  source_domain: "fallout.bethesda.net" # Domain for source identification
+  fetch_method: "playwright"            # Use Playwright to wait for JS rendering
+  start_url: "https://fallout.bethesda.net/en"
+  seed_urls:                            # Additional starting points
+    - "https://fallout.bethesda.net/en/news"
+    - "https://fallout.bethesda.net/en/games"
+    - "https://fallout.bethesda.net/en/games/fallout-76"
+    - "https://fallout.bethesda.net/en/games/fallout-4"
+    - "https://fallout.bethesda.net/en/games/fallout-3"
+    - "https://fallout.bethesda.net/en/games/fallout-new-vegas"
+    - "https://fallout.bethesda.net/en/games/fallout-shelter"
+    - "https://fallout.bethesda.net/en/seasons"
+    - "https://fallout.bethesda.net/en/expansions"
+    - "https://fallout.bethesda.net/en/fallout1st"
+  domain_whitelist:
+    - "fallout.bethesda.net"  # Only crawl URLs from this domain
+  max_depth: 3                # Maximum recursion depth for link following
+
+# Browser configuration (for Playwright)
+browser:
+  headless: true              # Run browser in headless mode
+  browser_type: "chromium"    # Browser type
+  viewport_width: 1920        # Browser viewport width
+  viewport_height: 1080       # Browser viewport height
+  block_images: true          # Block image loading for speed
+  block_ads: true             # Block ads and analytics for speed
+  timeout_seconds: 30         # Page load timeout
+

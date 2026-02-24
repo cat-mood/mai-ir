@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Search Results - {{ query }}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            padding: 30px 40px;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            color: #333;
+            font-size: 1.8em;
+            margin-bottom: 20px;
+        }
+        
+        .search-form {
+            display: flex;
+            gap: 15px;
+        }
+        
+        .search-input {
+            flex: 1;
+            padding: 15px 20px;
+            font-size: 1em;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            outline: none;
+            transition: border-color 0.3s ease;
+        }
+        
+        .search-input:focus {
+            border-color: #667eea;
+        }
+        
+        .search-button {
+            padding: 15px 35px;
+            font-size: 1em;
+            font-weight: 600;
+            color: white;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+        }
+        
+        .search-button:hover {
+            transform: translateY(-2px);
+        }
+        
+        .stats {
+            background: #f8f9fa;
+            padding: 15px 20px;
+            border-radius: 10px;
+            margin-top: 20px;
+            color: #666;
+        }
+        
+        .results {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .result-item {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            padding: 25px 30px;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        
+        .result-item:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+        }
+        
+        .result-title {
+            font-size: 1.4em;
+            color: #667eea;
+            margin-bottom: 10px;
+            text-decoration: none;
+            display: block;
+            font-weight: 600;
+        }
+        
+        .result-title:hover {
+            color: #764ba2;
+            text-decoration: underline;
+        }
+        
+        .result-url {
+            color: #28a745;
+            font-size: 0.9em;
+            margin-bottom: 8px;
+            word-break: break-all;
+        }
+        
+        .result-id {
+            color: #999;
+            font-size: 0.85em;
+        }
+        
+        .error {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 10px;
+            padding: 20px;
+            color: #856404;
+            margin-bottom: 20px;
+        }
+        
+        .no-results {
+            background: white;
+            border-radius: 15px;
+            padding: 40px;
+            text-align: center;
+            color: #666;
+        }
+        
+        .back-link {
+            display: inline-block;
+            margin-top: 30px;
+            padding: 12px 30px;
+            background: white;
+            color: #667eea;
+            text-decoration: none;
+            border-radius: 10px;
+            font-weight: 600;
+            transition: all 0.2s ease;
+        }
+        
+        .back-link:hover {
+            background: #667eea;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Search Results</h1>
+            <form method="post" action="/search" class="search-form">
+                <input 
+                    type="text" 
+                    name="query" 
+                    class="search-input" 
+                    value="{{ query }}" 
+                    required
+                >
+                <button type="submit" class="search-button">Search</button>
+            </form>
+            
+            {% if total is defined %}
+            <div class="stats">
+                Found <strong>{{ total }}</strong> documents for query: <strong>"{{ query }}"</strong>
+            </div>
+            {% endif %}
+        </div>
+        
+        {% if error is defined %}
+        <div class="error">
+            <strong>Error:</strong> {{ error }}
+        </div>
+        {% endif %}
+        
+        {% if results %}
+        <div class="results">
+            {% for result in results %}
+            <div class="result-item">
+                <a href="{{ result.url }}" class="result-title" target="_blank">
+                    {{ result.title if result.title else "Untitled Document" }}
+                </a>
+                <div class="result-url">{{ result.url }}</div>
+                <div class="result-id">Document ID: {{ result.doc_id }}</div>
+            </div>
+            {% endfor %}
+        </div>
+        {% elif not error %}
+        <div class="no-results">
+            <h2>No results found</h2>
+            <p>Try a different query or use different operators</p>
+        </div>
+        {% endif %}
+        
+        <div style="text-align: center;">
+            <a href="/" class="back-link">New Search</a>
+        </div>
+    </div>
+</body>
+</html>

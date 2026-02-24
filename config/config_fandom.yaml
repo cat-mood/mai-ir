@@ -1,4 +1,4 @@
-# Fallout Wiki Crawler Configuration
+# Fallout Wiki Crawler Configuration - Fandom Source
 
 # Database configuration
 db:
@@ -10,17 +10,20 @@ db:
 
 # Crawler logic configuration
 logic:
-  delay_seconds: 1.0          # Delay between page fetches (be respectful to the server)
+  delay_seconds: 2.0          # Delay between page fetches (increased for politeness)
   recrawl_age_days: 30        # Re-crawl pages older than this many days
-  user_agent: "FalloutWikiCrawler/1.0"  # User agent string for requests
+  user_agent: "rotate"        # Use "rotate" for User-Agent rotation
   max_retries: 3              # Maximum number of retries for failed requests
   timeout_seconds: 30         # Request timeout in seconds
+  captcha_wait_minutes: 10    # Minutes to wait after CAPTCHA detection
 
 # Crawler-specific settings
 crawler:
+  crawler_id: "fandom_crawler"           # Unique ID for this crawler
+  source_name: "Fallout Fandom"          # Human-readable source name
+  source_domain: "fallout.fandom.com"    # Domain for source identification
+  fetch_method: "playwright"             # Use browser fetcher to pass Cloudflare challenge on Fandom
   start_url: "https://fallout.fandom.com/wiki/Special:Categories"
   domain_whitelist:
     - "fallout.fandom.com"    # Only crawl URLs from this domain
-
-
 

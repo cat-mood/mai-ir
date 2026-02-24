@@ -3,11 +3,14 @@
 import time
 import signal
 import sys
+from urllib.parse import quote, unquote, urlparse
 from typing import List, Set, Optional, Dict, Any
-import requests
 from bs4 import BeautifulSoup
-from url_normalizer import normalize_url, is_valid_url, get_domain
-from db_manager import DatabaseManager
+import requests
+from src.utils.url_normalizer import normalize_url, is_valid_url, get_domain
+from src.db.db_manager import DatabaseManager
+from src.fetchers.fetcher_factory import create_fetcher
+from src.fetchers.base_fetcher import BaseFetcher
 
 
 class FalloutWikiCrawler:
@@ -27,12 +30,24 @@ class FalloutWikiCrawler:
         # Crawler settings
         self.delay = config.get('logic', {}).get('delay_seconds', 1.0)
         self.recrawl_age_days = config.get('logic', {}).get('recrawl_age_days', 30)
-        self.user_agent = config.get('logic', {}).get('user_agent', 'FalloutWikiCrawler/1.0')
-        self.max_retries = config.get('logic', {}).get('max_retries', 3)
-        self.timeout = config.get('logic', {}).get('timeout_seconds', 30)
         
         self.start_url = config.get('crawler', {}).get('start_url', '')
         self.domain_whitelist = config.get('crawler', {}).get('domain_whitelist', [])
+        self.source_name = config.get('crawler', {}).get('source_name', 'Fallout Wiki')
+        self.source_domain = config.get('crawler', {}).get('source_domain', 'fallout.fandom.com')
+        self.use_mediawiki_api = config.get('crawler', {}).get(
+            'use_mediawiki_api',
+            self.source_domain == 'fallout.wiki'
+        )
+        self.api_endpoint = config.get('crawler', {}).get(
+            'api_endpoint',
+            f"https://{self.source_domain}/api.php"
+        )
+        self.api_limit = config.get('crawler', {}).get('api_limit', 500)
+        
+        # Initialize fetcher (requests or playwright based on config)
+        self.fetcher = create_fetcher(config)
+        self.session = requests.Session()
         
         # State tracking
         self.should_stop = False
@@ -49,38 +64,165 @@ class FalloutWikiCrawler:
         # Setup signal handlers for graceful shutdown
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
+
+    @staticmethod
+    def _extract_category_name(item: Dict[str, Any]) -> Optional[str]:
+        """Extract category name from MediaWiki API response object."""
+        for key in ('*', 'category', 'name', 'title'):
+            value = item.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        return None
+
+    def _title_to_url(self, title: str) -> str:
+        """Convert a MediaWiki page title to canonical wiki URL."""
+        normalized_title = title.replace(' ', '_')
+        return f"https://{self.source_domain}/wiki/{quote(normalized_title, safe='')}"
+
+    def _url_to_title(self, url: str) -> str:
+        """Convert wiki URL path to MediaWiki page title."""
+        parsed = urlparse(url)
+        path = parsed.path
+        if '/wiki/' in path:
+            page_part = path.split('/wiki/', 1)[1]
+        else:
+            page_part = path.strip('/')
+        return unquote(page_part).replace('_', ' ')
+
+    def _api_get(self, params: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Call MediaWiki API and return JSON payload."""
+        try:
+            response = self.session.get(
+                self.api_endpoint,
+                params=params,
+                timeout=self.config.get('logic', {}).get('timeout_seconds', 30)
+            )
+            response.raise_for_status()
+            payload = response.json()
+            if payload.get('error'):
+                print(f"⚠️  MediaWiki API error: {payload['error']}")
+                return None
+            return payload
+        except Exception as e:
+            print(f"⚠️  MediaWiki API request failed: {e}")
+            return None
+
+    def _api_fetch_all_categories(self) -> List[str]:
+        """Fetch all categories from MediaWiki API with pagination."""
+        categories: List[str] = []
+        seen: Set[str] = set()
+        ac_continue: Optional[str] = None
+        page_num = 1
+
+        while not self.should_stop:
+            print(f"📄 Fetching categories page {page_num} via MediaWiki API...")
+            params: Dict[str, Any] = {
+                'action': 'query',
+                'list': 'allcategories',
+                'aclimit': self.api_limit,
+                'format': 'json',
+            }
+            if ac_continue:
+                params['accontinue'] = ac_continue
+
+            payload = self._api_get(params)
+            if not payload:
+                break
+
+            batch_count = 0
+            for item in payload.get('query', {}).get('allcategories', []):
+                category_name = self._extract_category_name(item)
+                if not category_name:
+                    continue
+                title = category_name if category_name.startswith('Category:') else f"Category:{category_name}"
+                full_url = self._title_to_url(title)
+                normalized = normalize_url(full_url)
+                if normalized and is_valid_url(normalized, self.domain_whitelist) and normalized not in seen:
+                    categories.append(normalized)
+                    seen.add(normalized)
+                    batch_count += 1
+
+            print(f"✅ Found {batch_count} categories on page {page_num}")
+
+            ac_continue = payload.get('continue', {}).get('accontinue')
+            if not ac_continue:
+                break
+            page_num += 1
+            time.sleep(self.delay)
+
+        return categories
+
+    def _api_fetch_category_members(self, category_url: str) -> List[str]:
+        """Fetch article URLs from a category using MediaWiki API."""
+        category_title = self._url_to_title(category_url)
+        if not category_title.startswith('Category:'):
+            category_title = f"Category:{category_title}"
+
+        articles: List[str] = []
+        seen: Set[str] = set()
+        cm_continue: Optional[str] = None
+
+        while not self.should_stop:
+            params: Dict[str, Any] = {
+                'action': 'query',
+                'list': 'categorymembers',
+                'cmtitle': category_title,
+                'cmlimit': self.api_limit,
+                'format': 'json',
+            }
+            if cm_continue:
+                params['cmcontinue'] = cm_continue
+
+            payload = self._api_get(params)
+            if not payload:
+                break
+
+            for item in payload.get('query', {}).get('categorymembers', []):
+                # Keep only article namespace pages.
+                if item.get('ns') != 0:
+                    continue
+                title = item.get('title')
+                if not title:
+                    continue
+                full_url = self._title_to_url(title)
+                normalized = normalize_url(full_url)
+                if normalized and is_valid_url(normalized, self.domain_whitelist) and normalized not in seen:
+                    articles.append(normalized)
+                    seen.add(normalized)
+
+            cm_continue = payload.get('continue', {}).get('cmcontinue')
+            if not cm_continue:
+                break
+            time.sleep(self.delay)
+
+        return articles
+
+    def _api_fetch_article_html(self, article_url: str) -> Optional[str]:
+        """Fetch rendered article HTML via MediaWiki API parse endpoint."""
+        title = self._url_to_title(article_url)
+        payload = self._api_get(
+            {
+                'action': 'parse',
+                'page': title,
+                'prop': 'text',
+                'redirects': 1,
+                'format': 'json',
+                'formatversion': 2,
+            }
+        )
+        if not payload:
+            return None
+
+        parse_data = payload.get('parse', {})
+        html = parse_data.get('text')
+        if isinstance(html, str):
+            return html
+        return None
         
     def _signal_handler(self, signum, frame):
         """Handle interrupt signals for graceful shutdown."""
         print("\n⚠️  Received interrupt signal. Saving state and shutting down...")
         self.should_stop = True
-        
-    def fetch_page(self, url: str, retry_count: int = 0) -> Optional[str]:
-        """
-        Fetch a page with retries and error handling.
-        
-        Args:
-            url: URL to fetch
-            retry_count: Current retry attempt
-            
-        Returns:
-            HTML content or None if failed
-        """
-        try:
-            headers = {'User-Agent': self.user_agent}
-            response = requests.get(url, headers=headers, timeout=self.timeout)
-            response.raise_for_status()
-            return response.text
-            
-        except requests.exceptions.RequestException as e:
-            if retry_count < self.max_retries:
-                wait_time = 2 ** retry_count  # Exponential backoff
-                print(f"⚠️  Error fetching {url}: {e}. Retrying in {wait_time}s...")
-                time.sleep(wait_time)
-                return self.fetch_page(url, retry_count + 1)
-            else:
-                print(f"❌ Failed to fetch {url} after {self.max_retries} retries: {e}")
-                return None
                 
     def extract_category_links(self, html: str, base_url: str) -> List[str]:
         """
@@ -98,6 +240,15 @@ class FalloutWikiCrawler:
         
         # Find all links on the page
         links = soup.find_all('a', href=True)
+        
+        # Debug: Count category-like links
+        category_href_count = 0
+        for link in links:
+            href = link.get('href', '')
+            if '/wiki/Category:' in href or 'wiki/Category:' in href:
+                category_href_count += 1
+        
+        print(f"🔍 DEBUG: Found {len(links)} total links, {category_href_count} contain '/wiki/Category:'")
         
         for link in links:
             href = link.get('href', '')
@@ -118,6 +269,12 @@ class FalloutWikiCrawler:
                 if normalized and is_valid_url(normalized, self.domain_whitelist):
                     if normalized not in category_links:  # Avoid duplicates
                         category_links.append(normalized)
+        
+        print(f"🔍 DEBUG: Extracted {len(category_links)} valid category links")
+        if len(category_links) == 0 and category_href_count > 0:
+            print(f"⚠️  WARNING: Found {category_href_count} category hrefs but extracted 0 - check domain whitelist!")
+            print(f"   Domain whitelist: {self.domain_whitelist}")
+            print(f"   Base URL domain: {get_domain(base_url)}")
         
         return category_links
     
@@ -190,6 +347,26 @@ class FalloutWikiCrawler:
         # Fandom uses 'category-page__members' class
         category_content = soup.find('div', class_='category-page__members')
         
+        # Debug: Save HTML for Airports category
+        if 'Airports' in base_url:
+            try:
+                with open('/tmp/airports_debug.html', 'w', encoding='utf-8') as f:
+                    f.write(html)
+                all_links = soup.find_all('a', href=True)
+                wiki_links = [l for l in all_links if '/wiki/' in l.get('href', '')]
+                print(f"🔍 DEBUG Airports: HTML saved to /tmp/airports_debug.html")
+                print(f"🔍 DEBUG: category_content={category_content is not None}, total_links={len(all_links)}, wiki_links={len(wiki_links)}")
+                if category_content:
+                    cat_links = category_content.find_all('a', href=True)
+                    print(f"🔍 DEBUG: Links in category-page__members: {len(cat_links)}")
+                    # Show first few links
+                    for i, link in enumerate(cat_links[:5]):
+                        href = link.get('href', '')
+                        has_colon = ':' in href.split('/wiki/')[1] if '/wiki/' in href else False
+                        print(f"🔍   Link {i+1}: {href} (has_colon: {has_colon})")
+            except Exception as e:
+                print(f"🔍 DEBUG ERROR: {e}")
+        
         # Fallback to MediaWiki standard classes
         if not category_content:
             category_content_list = soup.find_all(['div', 'ul'], class_=['mw-category', 'mw-category-group'])
@@ -240,6 +417,14 @@ class FalloutWikiCrawler:
     
     def crawl_all_categories_from_start_url(self):
         """Crawl all category pages with pagination from the start URL."""
+        if self.use_mediawiki_api:
+            print(f"🔍 Fetching categories from {self.api_endpoint} (MediaWiki API)")
+            self.categories = self._api_fetch_all_categories()
+            print(f"📊 Total categories found: {len(self.categories)}")
+            # Persist categories immediately so restarts don't re-fetch them.
+            self.save_state()
+            return
+
         print(f"🔍 Fetching categories from {self.start_url}")
         
         current_page_url = self.start_url
@@ -248,7 +433,7 @@ class FalloutWikiCrawler:
         while current_page_url and not self.should_stop:
             print(f"📄 Fetching categories page {page_num}...")
             
-            html = self.fetch_page(current_page_url)
+            html = self.fetcher.fetch_page(current_page_url)
             if not html:
                 break
             
@@ -279,6 +464,9 @@ class FalloutWikiCrawler:
         Returns:
             List of article URLs found in the category
         """
+        if self.use_mediawiki_api:
+            return self._api_fetch_category_members(category_url)
+
         articles = []
         current_page = category_url
         page_num = 1
@@ -287,7 +475,7 @@ class FalloutWikiCrawler:
             if page_num > 1:
                 print(f"  📄 Fetching category page {page_num}...")
             
-            html = self.fetch_page(current_page)
+            html = self.fetcher.fetch_page(current_page)
             if not html:
                 break
             
@@ -315,13 +503,16 @@ class FalloutWikiCrawler:
             article_url: URL of the article to crawl
         """
         # Check if we need to crawl this article
-        html = self.fetch_page(article_url)
+        if self.use_mediawiki_api:
+            html = self._api_fetch_article_html(article_url)
+        else:
+            html = self.fetcher.fetch_page(article_url)
         if not html:
             return
         
-        # Check if document needs update
-        if self.db.document_needs_update(article_url, html, self.recrawl_age_days):
-            success = self.db.save_document(article_url, html)
+        # Check if document needs update (with source_domain)
+        if self.db.document_needs_update(article_url, html, self.recrawl_age_days, self.source_domain):
+            success = self.db.save_document(article_url, html, self.source_name, self.source_domain)
             if success:
                 self.pages_updated += 1
                 print(f"  ✅ Saved: {article_url}")
@@ -344,6 +535,10 @@ class FalloutWikiCrawler:
             'pages_updated': self.pages_updated,
             'pages_skipped': self.pages_skipped,
         }
+        # Cache categories so restart can resume without re-fetching.
+        # (11k URLs is well under MongoDB's 16MB document limit.)
+        if self.categories:
+            state['categories'] = self.categories
         self.db.save_crawl_state(state)
         print(f"💾 State saved (category {self.current_category_index + 1}/{len(self.categories)})")
     
@@ -361,6 +556,9 @@ class FalloutWikiCrawler:
             self.pages_crawled = state.get('pages_crawled', 0)
             self.pages_updated = state.get('pages_updated', 0)
             self.pages_skipped = state.get('pages_skipped', 0)
+            cached_categories = state.get('categories')
+            if isinstance(cached_categories, list) and cached_categories:
+                self.categories = [c for c in cached_categories if isinstance(c, str) and c]
             
             print(f"📂 Loaded previous state:")
             print(f"   - Category: {self.current_category_index + 1}/{state.get('total_categories', '?')}")
@@ -448,4 +646,8 @@ class FalloutWikiCrawler:
         print("=" * 60)
         
         self.save_state()
+        
+        # Clean up fetcher resources
+        self.session.close()
+        self.fetcher.close()
 

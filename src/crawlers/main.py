@@ -8,8 +8,8 @@ Usage:
 
 import sys
 import yaml
-from db_manager import DatabaseManager
-from crawler import FalloutWikiCrawler
+from src.db.db_manager import DatabaseManager
+from src.crawlers.crawler import FalloutWikiCrawler
 
 
 def load_config(config_path: str) -> dict:
@@ -53,7 +53,7 @@ def main():
     
     # Initialize database manager
     print("🔌 Connecting to MongoDB...")
-    db_manager = DatabaseManager(config.get('db', {}))
+    db_manager = DatabaseManager(config)
     
     try:
         db_manager.connect()

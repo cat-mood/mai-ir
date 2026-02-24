@@ -18,20 +18,58 @@ services:
     networks:
       - crawler_network
 
-  # Fallout Wiki Crawler
-  crawler:
+  # Fallout Wiki Crawler - Fandom Source
+  crawler_fandom:
     build: .
-    container_name: fallout_wiki_crawler
+    container_name: fallout_crawler_fandom
     depends_on:
       mongodb:
         condition: service_healthy
     volumes:
-      - ./config.yaml:/app/config.yaml:ro
+      - ./config/config_fandom.yaml:/app/config.yaml:ro
+    command: ["python", "-m", "src.crawlers.main", "config.yaml"]
     networks:
       - crawler_network
     restart: unless-stopped
     environment:
       - PYTHONUNBUFFERED=1
+      - CRAWLER_NAME=fandom
+      - NON_INTERACTIVE=true
+
+  # Fallout Wiki Crawler - Fallout.wiki Source
+  crawler_fallout_wiki:
+    build: .
+    container_name: fallout_crawler_fallout_wiki
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    volumes:
+      - ./config/config_fallout_wiki.yaml:/app/config.yaml:ro
+    command: ["python", "-m", "src.crawlers.main", "config.yaml"]
+    networks:
+      - crawler_network
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
+      - CRAWLER_NAME=fallout_wiki
+      - NON_INTERACTIVE=true
+
+  # Bethesda Fallout Site Crawler
+  crawler_bethesda:
+    build: .
+    container_name: fallout_crawler_bethesda
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    volumes:
+      - ./config/config_bethesda.yaml:/app/config.yaml:ro
+    command: ["python", "-m", "src.crawlers.main_bethesda", "config.yaml"]
+    networks:
+      - crawler_network
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
+      - CRAWLER_NAME=bethesda
 
 volumes:
   mongodb_data:

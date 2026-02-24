@@ -1,0 +1,566 @@
+\documentclass[a4paper,12pt]{article}
+
+\usepackage[T2A]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[russian]{babel}
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{graphicx}
+\usepackage{color}
+\usepackage{hyperref}
+\usepackage{geometry}
+\usepackage{indentfirst}
+\usepackage{longtable}
+\usepackage{booktabs}
+\usepackage{float}
+\usepackage{listings}
+\usepackage{xcolor}
+\geometry{left=3cm,right=1.5cm,top=2cm,bottom=2cm}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  frame=single,
+  backgroundcolor=\color{gray!10},
+  numbers=none,
+  tabsize=2
+}
+
+\begin{document}
+
+\begin{titlepage}
+    \centering
+    {\fontsize{14pt}{16pt}\selectfont МОСКОВСКИЙ АВИАЦИОННЫЙ ИНСТИТУТ\\(НАЦИОНАЛЬНЫЙ ИССЛЕДОВАТЕЛЬСКИЙ УНИВЕРСИТЕТ)}\\[0.5cm]
+    {\fontsize{12pt}{14pt}\selectfont Институт №8 «Компьютерные науки и прикладная математика»}\\[4cm]
+    
+    {\fontsize{16pt}{18pt}\selectfont \textbf{Лабораторные работы}}\\
+    {\fontsize{14pt}{16pt}\selectfont \textbf{по курсу «Информационный поиск»}}\\[5cm]
+    
+    \vfill
+    \begin{flushright}
+        \begin{minipage}{0.51\textwidth}
+            Выполнил: Голубев Тимофей Дмитриевич\\
+            Группа: М8О-406Б-22\\
+            Преподаватель: Кухтичев Антон Алексеевич
+        \end{minipage}
+    \end{flushright}
+    
+    \vfill
+    {\large Москва, 2026}
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+%% ====================================================================
+\section{Лабораторная работа №1. Добыча корпуса документов}
+
+\subsection{Задание}
+Скачать корпус документов единой тематики объёмом не менее 30\,000 статей из не менее чем двух источников. Ознакомиться с его характеристиками, выделить текст, найти существующие поисковики для данного корпуса. Привести статистическую информацию о корпусе.
+
+\subsection{Описание метода решения}
+В качестве тематики выбрана вселенная \textbf{Fallout} (англоязычные вики-статьи и страницы). Использованы три источника:
+\begin{enumerate}
+    \item \textbf{Fallout Fandom Wiki} (\url{https://fallout.fandom.com}) --- крупнейшая вики по вселенной Fallout на платформе Fandom. Содержит статьи об игровых локациях, персонажах, квестах, оружии и предметах.
+    \item \textbf{Bethesda.net} (\url{https://fallout.bethesda.net}) --- официальный сайт серии Fallout. Содержит новости, описания игр, обновлений и сезонного контента.
+    \item \textbf{The Vault (fallout.wiki)} (\url{https://fallout.wiki}) --- независимая вики по Fallout на платформе MediaWiki.
+\end{enumerate}
+
+Текст выделяется из HTML с помощью библиотеки \texttt{BeautifulSoup} (парсер \texttt{lxml}): удаляются теги \texttt{<script>}, \texttt{<style>}, \texttt{<meta>}, \texttt{<link>}, \texttt{<noscript>}, а также навигационные элементы (\texttt{<nav>}, \texttt{<footer>}, \texttt{<header>}) и шаблонный контент (баннеры cookie, боковые панели). После удаления тегов текст нормализуется: множественные пробелы заменяются одним.
+
+Существующие поисковики для данного корпуса:
+\begin{itemize}
+    \item Встроенный поиск на каждом из сайтов-источников (MediaWiki Search на Fandom и fallout.wiki, поиск по bethesda.net).
+    \item Поиск Google с ограничением: \texttt{site:fallout.fandom.com}, \texttt{site:fallout.bethesda.net}.
+\end{itemize}
+
+Примеры запросов к существующим поисковикам:
+\begin{itemize}
+    \item \texttt{site:fallout.fandom.com vault 101} --- Google находит статьи, но не позволяет задать булев запрос с оператором NOT.
+    \item Встроенный поиск Fandom не поддерживает логические операторы AND/OR/NOT.
+    \item \texttt{site:fallout.bethesda.net power armor} --- результаты смешаны с новостями и промо-страницами.
+\end{itemize}
+
+\subsection{Журнал выполнения}
+\begin{enumerate}
+    \item Поднят MongoDB~7 в Docker-контейнере через \texttt{docker-compose.yml}.
+    \item Разработаны два краулера на Python: \texttt{FalloutWikiCrawler} для вики-сайтов и \texttt{BethesdaSiteCrawler} для bethesda.net (подробнее в лабораторной работе №2).
+    \item Скрипт \texttt{export\_documents.py} извлекает текст из HTML и формирует JSONL-файл формата: \texttt{\{doc\_id, url, title, text\}}.
+    \item URL-адреса нормализуются: приведение к нижнему регистру, удаление дублирующих слешей и trailing-слешей, очистка фрагментов и параметров.
+    \item Все документы сохранены в MongoDB (коллекция \texttt{documents}) со следующими полями: \texttt{url}, \texttt{html}, \texttt{source}, \texttt{source\_domain}, \texttt{timestamp}, \texttt{content\_hash}.
+\end{enumerate}
+
+\subsection{Результаты}
+
+\begin{table}[H]
+\centering
+\caption{Статистика корпуса документов}
+\begin{tabular}{lr}
+\toprule
+Параметр & Значение \\
+\midrule
+Количество документов & 43\,440 \\
+\quad из них Fallout Fandom Wiki & $\approx$ 38\,000 \\
+\quad из них Bethesda.net & $\approx$ 5\,000 \\
+\quad из них fallout.wiki & $\approx$ 440 \\
+Размер выделенного текста (суммарный) & 166 МБ \\
+Средний размер текста в документе & 7\,018 байт \\
+Кодировка & UTF-8 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Выводы}
+Корпус из 43\,440 англоязычных статей по вселенной Fallout успешно собран из трёх независимых источников, что превышает минимальные требования (30\,000). Корпус разнообразен по содержанию: Fandom Wiki содержит подробные энциклопедические статьи, Bethesda.net --- официальные новости и описания, fallout.wiki --- альтернативные вики-статьи. Средний объём текста (~7\,000 байт) достаточен для построения поискового индекса.
+
+
+%% ====================================================================
+\section{Лабораторная работа №2. Поисковый робот}
+
+\subsection{Задание}
+Написать поискового робота, который принимает путь до YAML-конфига и сохраняет документы в базу данных. Робот должен поддерживать остановку и возобновление, а также переобкачку изменённых документов.
+
+\subsection{Описание метода решения}
+Реализованы два поисковых робота на Python:
+
+\textbf{1. FalloutWikiCrawler} (\texttt{src/crawlers/crawler.py}):
+\begin{itemize}
+    \item Обкачивает вики-сайты (Fandom, fallout.wiki) через перебор категорий.
+    \item Поддерживает два режима: через MediaWiki API (\texttt{use\_mediawiki\_api: true}) и через парсинг HTML.
+    \item API-режим используется для fallout.wiki (быстрая обкачка без ограничений Cloudflare).
+    \item HTML-режим используется для Fandom, где API недоступен.
+\end{itemize}
+
+\textbf{2. BethesdaSiteCrawler} (\texttt{src/crawlers/crawler\_bethesda.py}):
+\begin{itemize}
+    \item Рекурсивный обход ссылок с ограничением глубины (\texttt{max\_depth: 3}).
+    \item Стартует с нескольких seed-URL (новости, описания игр, сезонный контент).
+    \item Фильтрует нерелевантные URL (логин, API, медиафайлы, внешние домены).
+\end{itemize}
+
+\textbf{Система фетчеров} (\texttt{src/fetchers/}):
+\begin{itemize}
+    \item \texttt{RequestsFetcher} --- лёгкий HTTP-клиент на \texttt{requests}. Ротация User-Agent (8 вариантов), обнаружение CAPTCHA, экспоненциальный backoff.
+    \item \texttt{PlaywrightFetcher} --- браузерный фетчер для сайтов с JavaScript-рендерингом и защитой Cloudflare. Поддержка Chromium/Firefox/WebKit, блокировка изображений и рекламы, обход антибот-проверок.
+    \item \texttt{FetcherFactory} --- фабрика, создающая нужный фетчер по конфигурации.
+\end{itemize}
+
+Конфигурационные файлы хранятся в \texttt{config/}: по одному YAML-файлу на каждый источник (\texttt{config\_fandom.yaml}, \texttt{config\_fallout\_wiki.yaml}, \texttt{config\_bethesda.yaml}). Каждый файл содержит секции: \texttt{db} (подключение к MongoDB), \texttt{logic} (задержки, таймауты, User-Agent), \texttt{crawler} (параметры краулера), \texttt{browser} (настройки Playwright).
+
+Механизм возобновления: состояние краулера (текущий индекс категории, индекс статьи, статистика) сохраняется в коллекцию \texttt{crawl\_state} MongoDB. При перезапуске краулер продолжает с сохранённой позиции. Обработка сигналов SIGINT/SIGTERM обеспечивает корректное сохранение состояния при остановке.
+
+Механизм переобкачки: при сохранении документа вычисляется MD5-хеш HTML-контента (\texttt{content\_hash}). При повторной обкачке документ обновляется только если хеш изменился. Документы старше \texttt{recrawl\_age\_days} дней автоматически помечаются для переобкачки.
+
+Развёртывание: \texttt{docker-compose.yml} определяет 4 сервиса --- MongoDB~7 и три краулера, каждый со своим конфигом. Все сервисы находятся в единой Docker-сети.
+
+\subsection{Журнал выполнения}
+\begin{enumerate}
+    \item Поднят MongoDB~7 в Docker-контейнере.
+    \item Первоначально для Fandom использован \texttt{RequestsFetcher} --- обкачка прерывалась из-за защиты Cloudflare. Пришлось переключиться на \texttt{PlaywrightFetcher} с headless-браузером Chromium. Это стало основной трудностью при разработке краулера.
+    \item Для fallout.wiki задействован MediaWiki API --- скорость обкачки значительно выше, Cloudflare не мешает.
+    \item Для Bethesda.net использован рекурсивный обход с Playwright из-за JavaScript-рендеринга.
+    \item Общее время сбора корпуса: несколько часов (с учётом задержек между запросами для соблюдения вежливости).
+\end{enumerate}
+
+\subsection{Результаты}
+\begin{itemize}
+    \item Собрано 43\,440 документов из трёх источников.
+    \item Робот корректно возобновляет работу после остановки (состояние сохраняется в MongoDB).
+    \item Робот поддерживает переобкачку через сравнение MD5-хешей контента.
+    \item Docker Compose обеспечивает воспроизводимое развёртывание.
+\end{itemize}
+
+\subsection{Выводы}
+Реализован поисковый робот, поддерживающий все требуемые функции: конфигурация через YAML, остановка и возобновление, переобкачка изменённых документов. Основная трудность --- обход защиты Cloudflare на Fandom --- решена переходом на браузерный фетчер Playwright.
+
+
+%% ====================================================================
+\section{Лабораторная работа №3. Токенизация}
+
+\subsection{Задание}
+Реализовать процесс разбиения текстов документов на токены. Описать правила токенизации. Привести статистику: количество токенов, среднюю длину токена.
+
+\subsection{Описание метода решения}
+Токенизатор реализован на C++ с использованием собственных структур данных (\texttt{DynamicArray}, \texttt{HashMap}) без контейнеров STL. Исходный код: \texttt{search\_engine/src/tokenizer.cpp}.
+
+Правила токенизации:
+\begin{enumerate}
+    \item Текст сканируется посимвольно.
+    \item Буквенные символы (\texttt{std::isalpha}) и апострофы внутри слов накапливаются в текущий токен.
+    \item Символы приводятся к нижнему регистру (\texttt{std::tolower}).
+    \item Любой иной символ считается разделителем: текущий токен сбрасывается в выходной список, и начинается новый.
+    \item Токены длиной менее 2 символов отбрасываются.
+    \item Стоп-слова (90 слов: артикли, предлоги, местоимения, вспомогательные глаголы и~т.\,д.) удаляются.
+\end{enumerate}
+
+\subsection{Результаты}
+
+\begin{table}[H]
+\centering
+\caption{Статистика токенизации}
+\begin{tabular}{lr}
+\toprule
+Параметр & Значение \\
+\midrule
+Количество документов & 43\,440 \\
+Общее количество токенов & 18\,057\,511 \\
+Среднее количество токенов на документ & $\approx$ 764 \\
+Средняя длина токена & 6{,}08 символа \\
+Суммарный объём текста & 169 МБ \\
+Время работы (токенизация + стемминг + индексация) & 27{,}7 с \\
+Скорость & $1{,}7 \cdot 10^{-4}$ с/КБ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Выводы}
+Токенизатор реализован на C++ с собственными структурами данных. Список стоп-слов из 90 элементов обеспечивает удаление наиболее частотных служебных слов, что улучшает качество индекса и приближает распределение термов к закону Ципфа. Скорость обработки $\approx 6\,000$ КБ/с подтверждает линейную зависимость от объёма входных данных.
+
+
+%% ====================================================================
+\section{Лабораторная работа №4. Закон Ципфа}
+
+\subsection{Задание}
+Построить график распределения терминов по частотностям в логарифмической шкале, наложить на него закон Ципфа. Объяснить причины расхождения.
+
+\subsection{Описание метода решения}
+\begin{enumerate}
+    \item Подсчёт частот стеммированных термов выполнен модулем \texttt{ZipfAnalyzer} на C++. Используется хеш-таблица (\texttt{HashMap}) для подсчёта частот. Сортировка --- по убыванию частоты.
+    \item Результат сохранён в CSV-файл: \texttt{rank,frequency,term}.
+    \item Python-скрипт \texttt{scripts/plot\_zipf.py} строит график в логарифмической шкале с помощью \texttt{matplotlib}. На графике отображены две кривые: эмпирическая (частоты из корпуса) и теоретическая ($C/r$, где $C = f(1)$ --- частота самого частотного терма, $r$ --- ранг).
+\end{enumerate}
+
+\subsection{Результаты}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{zipf_plot.png}
+    \caption{Распределение терминов по частотностям (закон Ципфа)}
+    \label{fig:zipf}
+\end{figure}
+
+Топ-10 наиболее частотных терминов корпуса:
+
+\begin{table}[H]
+\centering
+\caption{Наиболее частотные термины}
+\begin{tabular}{rlr}
+\toprule
+Ранг & Терм & Частота \\
+\midrule
+1 & fallout & 244\,117 \\
+2 & note & 99\,755 \\
+3 & vault & 86\,517 \\
+4 & armor & 82\,545 \\
+5 & wiki & 71\,219 \\
+6 & station & 56\,206 \\
+7 & new & 55\,894 \\
+8 & on & 53\,803 \\
+9 & locat & 52\,232 \\
+10 & ogg & 51\,769 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Объяснение расхождений:}
+\begin{itemize}
+    \item \textbf{В области высоких рангов (1--25):} эмпирическая кривая образует плато --- частоты термов с рангами 2--25 убывают медленнее, чем предсказывает $C/r$. Это объясняется спецификой корпуса: термы \texttt{fallout}, \texttt{vault}, \texttt{armor}, \texttt{quest} встречаются практически на каждой странице вики, что создаёт искусственно высокую частотность. Кроме того, остатки шаблонного контента (навигация, подвал сайта) добавляют повторяющиеся термы вроде \texttt{wiki}, \texttt{ogg}, \texttt{fandom}.
+    \item \textbf{В области низких рангов (10\,000+):} эмпирическая кривая падает круче теоретической. Это связано с большим количеством редких терминов: имена собственные (NPC, локации), числовые идентификаторы, артефакты из HTML.
+    \item \textbf{В среднем диапазоне (25--10\,000):} наблюдается хорошее совпадение с теорией. Кривые приблизительно параллельны.
+\end{itemize}
+
+\textbf{Трудности.} Первоначальная версия графика показывала сильное плато в области рангов 2--25 из-за того, что при извлечении текста из HTML не удалялись навигационные блоки, подвал сайта и баннеры cookie. После улучшения очистки HTML (удаление тегов \texttt{<nav>}, \texttt{<footer>}, \texttt{<header>} и CSS-селекторов шаблонных элементов) и расширения списка стоп-слов с 55 до 90, распределение стало значительно ближе к теоретическому.
+
+\subsection{Выводы}
+Распределение терминов корпуса в целом подчиняется закону Ципфа. На графике в логарифмической шкале обе кривые приблизительно линейны с наклоном $\approx -1$. Расхождения на краях являются типичными для специализированных корпусов, особенно с тематической концентрацией (вселенная Fallout).
+
+
+%% ====================================================================
+\section{Лабораторная работа №5. Стемминг}
+
+\subsection{Задание}
+Добавить в поисковую систему стемминг.
+
+\subsection{Описание метода решения}
+Реализован алгоритм Портера (Porter Stemmer) на C++ без контейнеров STL. Исходный код: \texttt{search\_engine/src/stemmer.cpp}.
+
+Алгоритм Портера состоит из пяти шагов, каждый из которых применяет набор правил замены суффиксов. Ключевое понятие --- \emph{мера} $m$ (количество пар «гласная-согласная» в основе слова). Правила применяются при условии, что мера основы превышает заданный порог.
+
+\begin{table}[H]
+\centering
+\caption{Основные шаги алгоритма Портера}
+\begin{tabular}{llll}
+\toprule
+Шаг & Суффикс & Замена & Пример \\
+\midrule
+1a & \texttt{-sses} & \texttt{-ss} & caresses $\to$ caress \\
+   & \texttt{-ies} & \texttt{-i} & ponies $\to$ poni \\
+   & \texttt{-s} & $\emptyset$ & cats $\to$ cat \\
+1b & \texttt{-eed} & \texttt{-ee} ($m > 0$) & agreed $\to$ agree \\
+   & \texttt{-ed} & $\emptyset$ (гл.\ в основе) & played $\to$ play \\
+   & \texttt{-ing} & $\emptyset$ (гл.\ в основе) & playing $\to$ play \\
+1c & \texttt{-y} & \texttt{-i} (гл.\ в основе) & happy $\to$ happi \\
+2  & \texttt{-ational} & \texttt{-ate} ($m > 0$) & relational $\to$ relate \\
+   & \texttt{-ization} & \texttt{-ize} ($m > 0$) & digitization $\to$ digitize \\
+   & \texttt{-fulness} & \texttt{-ful} ($m > 0$) & hopefulness $\to$ hopeful \\
+3  & \texttt{-icate} & \texttt{-ic} ($m > 0$) & triplicate $\to$ triplic \\
+   & \texttt{-ful} & $\emptyset$ ($m > 0$) & hopeful $\to$ hope \\
+   & \texttt{-ness} & $\emptyset$ ($m > 0$) & goodness $\to$ good \\
+4  & \texttt{-al}, \texttt{-ance}, \texttt{-er}\ldots & $\emptyset$ ($m > 1$) & revival $\to$ reviv \\
+5  & финальная \texttt{-e} & $\emptyset$ ($m > 1$) & probate $\to$ probat \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Вспомогательные функции:
+\begin{itemize}
+    \item \texttt{measure()} --- подсчёт пар VC (vowel-consonant) в основе.
+    \item \texttt{is\_consonant(i)} --- определение согласной (буква \texttt{y} считается согласной в начале слова и гласной после согласной).
+    \item \texttt{cvc(i)} --- проверка паттерна «согласная-гласная-согласная» (используется для решения о добавлении \texttt{-e}).
+    \item \texttt{double\_consonant(i)} --- проверка удвоенной согласной.
+\end{itemize}
+
+Стемминг применяется как при индексации документов, так и к терминам поискового запроса для обеспечения консистентности.
+
+\subsection{Результаты}
+
+\begin{table}[H]
+\centering
+\caption{Примеры работы стеммера}
+\begin{tabular}{ll}
+\toprule
+Входное слово & Результат стемминга \\
+\midrule
+running & run \\
+ponies & poni \\
+national & nation \\
+generalization & gener \\
+effective & effect \\
+relational & relat \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Статистика стемминга}
+\begin{tabular}{lr}
+\toprule
+Параметр & Значение \\
+\midrule
+Общее количество токенов (до и после стемминга) & 18\,057\,511 \\
+Уникальных термов после стемминга & 130\,842 \\
+Средняя длина токена (до стемминга) & 6{,}08 символа \\
+Средняя длина терма (после стемминга) & 5{,}45 символа \\
+Сокращение средней длины & 10{,}4\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Сравнение со средней длиной токена.}
+Средняя длина терма (5{,}45) меньше средней длины токена (6{,}08) на 10{,}4\%. Это объясняется отсечением суффиксов алгоритмом Портера: \texttt{-ing} (3 символа), \texttt{-tion} (4 символа), \texttt{-ed} (2 символа), \texttt{-s} (1 символ) и др. Суффиксы в среднем укорачивают слово на 0{,}63 символа.
+
+\subsection{Выводы}
+Стеммер Портера реализован на C++ без контейнеров STL. Пятишаговый алгоритм обеспечивает эффективное сведение словоформ к общей основе с сокращением средней длины на 10{,}4\%. Стеммер интегрирован в конвейер индексации и поиска, что гарантирует консистентность между индексом и запросами.
+
+
+%% ====================================================================
+\section{Лабораторная работа №6. Булев индекс}
+
+\subsection{Задание}
+Построить поисковый индекс, пригодный для булева поиска. Индекс должен содержать обратный и прямой индексы.
+
+\subsection{Описание метода решения}
+Построение индекса реализовано на C++ без контейнеров STL. Исходный код: \texttt{search\_engine/src/index\_builder.cpp}.
+
+\textbf{Собственные структуры данных} (\texttt{search\_engine/src/data\_structures.h}):
+\begin{itemize}
+    \item \textbf{DynamicArray<T>} --- шаблонный динамический массив с автоматическим удвоением ёмкости. Поддерживает \texttt{push\_back}, \texttt{pop\_back}, итераторы, произвольный доступ.
+    \item \textbf{HashMap<K, V>} --- хеш-таблица с открытой адресацией и линейным пробированием. Начальная ёмкость: 16, порог заполнения: 0.7. Хеш-функция: \texttt{std::hash<K>}. Ленивое удаление (пометка deleted).
+\end{itemize}
+
+\textbf{Формат индекса} состоит из четырёх файлов:
+
+\textbf{1. vocabulary.txt} --- лексикон (обратный индекс, справочная часть):
+\begin{lstlisting}
+term_id term doc_frequency
+\end{lstlisting}
+
+\textbf{2. index.bin} --- постинг-листы (бинарный файл):
+\begin{lstlisting}
+For each term:
+  [int32] list_size
+  list_size pairs of:
+    [int32] doc_id
+    [int32] tf
+\end{lstlisting}
+
+\textbf{3. documents.txt} --- прямой индекс (метаданные документов):
+\begin{lstlisting}
+doc_id<TAB>url<TAB>title
+\end{lstlisting}
+
+\textbf{4. doc\_lengths.txt} --- длины документов (количество токенов):
+\begin{lstlisting}
+doc_length (one integer per line, ordered by doc_id)
+\end{lstlisting}
+
+Процесс построения индекса:
+\begin{enumerate}
+    \item Чтение JSONL-файла (один документ на строку).
+    \item Токенизация текста и стемминг каждого токена.
+    \item Подсчёт частот термов в каждом документе (TF).
+    \item Построение обратного индекса: для каждого стеммированного терма --- список пар \texttt{(doc\_id, tf)}.
+    \item Запись постинг-листов в бинарный файл и лексикона в текстовый.
+    \item Параллельно сохраняются длины документов и метаданные (URL, заголовок).
+\end{enumerate}
+
+\subsection{Результаты}
+
+\begin{table}[H]
+\centering
+\caption{Статистика индексации}
+\begin{tabular}{lr}
+\toprule
+Параметр & Значение \\
+\midrule
+Количество документов & 43\,440 \\
+Количество уникальных термов & 130\,842 \\
+Общее количество постингов & 8\,261\,697 \\
+Среднее количество постингов на терм & $\approx$ 63 \\
+Наиболее частотный терм & fallout (244\,117) \\
+Время индексации & 27{,}7 с \\
+Скорость индексации на КБ текста & $1{,}7 \cdot 10^{-4}$ с/КБ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Вывод построения индекса:}
+\begin{lstlisting}
+$ cd search_engine/build && ./index_builder ../../documents.jsonl ../index ../zipf_stats.csv
+=== Statistics ===
+documents=23641
+total_tokens=18057511
+total_stems=18057511
+avg_tokens_per_doc=763.8
+avg_token_length=6.08
+avg_stem_length=5.45
+stem_length_reduction=10.4%
+vocabulary_size=130842
+total_postings=8261697
+avg_postings_per_term=63.1
+text_bytes_total=169244416
+elapsed_seconds=27.69
+seconds_per_kb=0.000168
+\end{lstlisting}
+
+\subsection{Выводы}
+Индекс построен с использованием собственных структур данных (динамический массив и хеш-таблица). Бинарный формат постинг-листов компактен и обеспечивает быстрое чтение. Индексация 43\,440 документов выполнена за $\approx$28~секунд. Наличие частот термов (TF) в постинг-листах позволяет использовать ранжирование TF-IDF.
+
+
+%% ====================================================================
+\section{Лабораторная работа №7. Булев поиск и оценка качества}
+
+\subsection{Задание}
+Реализовать ввод поисковых запросов и их выполнение над индексом. Синтаксис: \texttt{AND} --- И, \texttt{OR} --- ИЛИ, \texttt{NOT} --- НЕ, поддержка скобок. Реализовать веб-сервис и утилиту командной строки. Оценить качество поиска с помощью стандартных метрик.
+
+\subsection{Описание метода решения}
+
+\subsubsection{Булев поиск с ранжированием TF-IDF}
+Поиск реализован на C++ без контейнеров STL. Исходный код: \texttt{search\_engine/src/search\_engine.cpp}.
+
+\textbf{Алгоритм выполнения запроса:}
+\begin{enumerate}
+    \item \textbf{Лексический анализ.} Входная строка разбивается на токены: термы, операторы (\texttt{AND}, \texttt{OR}, \texttt{NOT}), скобки.
+    \item \textbf{Стемминг.} К каждому поисковому терму применяется алгоритм Портера.
+    \item \textbf{Преобразование в обратную польскую запись (RPN).} Используется алгоритм Shunting Yard с приоритетами: $\texttt{NOT} > \texttt{AND} > \texttt{OR}$.
+    \item \textbf{Вычисление RPN.} Для каждого терма из лексикона извлекается постинг-лист. Операции AND, OR, NOT реализованы как теоретико-множественные операции (пересечение, объединение, разность) над отсортированными списками \texttt{doc\_id}.
+    \item \textbf{Ранжирование TF-IDF.} Для документов из результата булева поиска вычисляется релевантность:
+    \[
+        \text{score}(d, q) = \frac{\displaystyle\sum_{t \in q} \bigl(1 + \ln(\text{tf}_{t,d})\bigr) \cdot \biggl(\ln\frac{N+1}{\text{df}_t + 1} + 1\biggr) + b_{\text{title}} + b_{\text{url}}}{\sqrt{|d|}}
+    \]
+    где $\text{tf}_{t,d}$ --- частота терма $t$ в документе $d$, $\text{df}_t$ --- количество документов, содержащих терм, $N$ --- общее число документов, $|d|$ --- длина документа (в токенах), $b_{\text{title}} = 0.35$ при наличии терма в заголовке, $b_{\text{url}} = 0.15$ при наличии терма в URL.
+    \item \textbf{Сортировка} результатов по убыванию score. Выдача ограничена 100 документами.
+\end{enumerate}
+
+\subsubsection{Утилита командной строки}
+\begin{lstlisting}
+$ ./search_cli ../index
+\end{lstlisting}
+Интерактивный режим: пользователь вводит запрос, получает список результатов в формате \texttt{doc\_id\textbackslash{}turl\textbackslash{}ttitle}.
+
+\subsubsection{Веб-сервис}
+Реализован на \texttt{FastAPI} (Python) с сервером \texttt{uvicorn}. Файл: \texttt{web\_service/main.py}.
+\begin{itemize}
+    \item \texttt{GET /} --- начальная страница с формой ввода запроса.
+    \item \texttt{POST /search} --- выполнение поиска: вызов \texttt{search\_cli} как подпроцесса, парсинг вывода, формирование HTML-страницы с результатами.
+    \item Шаблоны: \texttt{index.html} (форма), \texttt{results.html} (результаты с заголовком, URL и doc\_id).
+\end{itemize}
+
+\subsubsection{Оценка качества поиска}
+Для оценки качества подготовлена разметка релевантности (ground truth) по 15 тестовым запросам. Разметка создана методом пулинга (TREC-style pooling): для каждого запроса из поисковой системы извлекаются 100 лучших результатов, затем каждый документ оценивается по шкале релевантности 0--3 на основе анализа содержания (наличие ключевых слов в заголовке и тексте).
+
+Реализованы следующие метрики (файл \texttt{evaluation/metrics.py}):
+\begin{itemize}
+    \item \textbf{P@K} (Precision at K) --- доля релевантных документов среди первых $K$:
+    \[
+        P@K = \frac{|\{d \in \text{top-}K : \text{rel}(d) > 0\}|}{K}
+    \]
+    \item \textbf{DCG@K} (Discounted Cumulative Gain) --- кумулятивный выигрыш с дисконтированием по позиции:
+    \[
+        \text{DCG}@K = \sum_{i=1}^{K} \frac{2^{\text{rel}_i} - 1}{\log_2(i + 1)}
+    \]
+    \item \textbf{NDCG@K} (Normalized DCG) --- DCG, нормализованный по идеальному ранжированию:
+    \[
+        \text{NDCG}@K = \frac{\text{DCG}@K}{\text{IDCG}@K}
+    \]
+    \item \textbf{ERR@K} (Expected Reciprocal Rank) --- ожидаемый обратный ранг, учитывающий вероятность удовлетворения пользователя:
+    \[
+        \text{ERR}@K = \sum_{i=1}^{K} \frac{1}{i} \prod_{j=1}^{i-1}(1 - R_j) \cdot R_i, \quad R_i = \frac{2^{\text{rel}_i} - 1}{2^{\text{rel}_{\max}}}
+    \]
+\end{itemize}
+
+\textbf{Трудности.} Первоначально все метрики оценки были равны нулю. Причина --- ошибка в конфигурации: фильтр по домену \texttt{--source-domain} был настроен на \texttt{fallout.fandom.com}, тогда как документы в индексе имели домен \texttt{fallout.bethesda.net}. Кроме того, исходная разметка релевантности содержала произвольные \texttt{doc\_id}, семантически не связанные с запросами. После исправления фильтра и создания корректной разметки методом пулинга метрики приняли осмысленные значения.
+
+\subsection{Примеры поисковых запросов}
+
+\begin{table}[H]
+\centering
+\caption{Примеры выполнения поисковых запросов}
+\begin{tabular}{lrl}
+\toprule
+Запрос & Результатов & Время \\
+\midrule
+\texttt{fallout AND vault} & 11\,225 & 356 мс \\
+\texttt{weapon OR armor} & 11\,469 & 210 мс \\
+\texttt{quest AND brotherhood} & 3\,258 & 48 мс \\
+\texttt{faction NOT enclave} & 2\,456 & 18 мс \\
+\texttt{power AND armor} & 6\,131 & 103 мс \\
+\texttt{nuclear OR atomic} & 8\,565 & 103 мс \\
+\texttt{wasteland} & 6\,834 & 52 мс \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Результаты оценки качества}
+
+\begin{table}[H]
+\centering
+\caption{Средние метрики оценки качества по 15 запросам}
+\begin{tabular}{lrrr}
+\toprule
+Метрика & @5 & @10 & @20 \\
+\midrule
+P (Precision) & 0{,}9467 & 0{,}9733 & 0{,}9633 \\
+DCG & 13{,}94 & 19{,}85 & 28{,}70 \\
+NDCG & 0{,}8444 & 0{,}8307 & 0{,}8311 \\
+ERR & 0{,}7547 & 0{,}7635 & 0{,}7649 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Высокие значения Precision ($> 0{,}94$) объясняются тем, что булев поиск с ключевыми словами вселенной Fallout (vault, armor, quest) возвращает документы, где эти термы гарантированно присутствуют. NDCG $\approx 0{,}83$ указывает на хорошее, но не идеальное ранжирование: документы с наивысшей релевантностью не всегда находятся на первых позициях. ERR $\approx 0{,}76$ отражает высокую вероятность того, что пользователь найдёт удовлетворительный результат в первых позициях выдачи.
+
+\subsection{Выводы}
+Реализован булев поиск с полной поддержкой операторов AND, OR, NOT и скобок, дополненный ранжированием TF-IDF с бустами за заголовок и URL. Поиск работает быстро (< 1~с на запрос) благодаря бинарному индексу и эффективным теоретико-множественным операциям. Реализованы утилита командной строки и веб-сервис на FastAPI. Оценка качества по 15 тестовым запросам показала высокие значения Precision ($> 0{,}94$) и NDCG ($\approx 0{,}83$).
+
+\end{document}

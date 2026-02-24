@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Boolean Search Engine - Fallout Wiki</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 60px 40px;
+            max-width: 700px;
+            width: 100%;
+        }
+        
+        h1 {
+            color: #333;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        
+        .subtitle {
+            color: #666;
+            text-align: center;
+            margin-bottom: 40px;
+            font-size: 1.1em;
+        }
+        
+        .search-form {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .search-input {
+            padding: 18px 25px;
+            font-size: 1.1em;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            transition: all 0.3s ease;
+            outline: none;
+        }
+        
+        .search-input:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .search-button {
+            padding: 18px 40px;
+            font-size: 1.1em;
+            font-weight: 600;
+            color: white;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        
+        .search-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+        }
+        
+        .search-button:active {
+            transform: translateY(0);
+        }
+        
+        .help-text {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 30px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .help-text h3 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+        
+        .help-text p {
+            color: #666;
+            line-height: 1.6;
+            margin-bottom: 8px;
+        }
+        
+        .help-text code {
+            background: #e9ecef;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            color: #764ba2;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Boolean Search Engine</h1>
+        <p class="subtitle">Search Fallout Wiki with Boolean operators</p>
+        
+        <form method="post" action="/search" class="search-form">
+            <input 
+                type="text" 
+                name="query" 
+                class="search-input" 
+                placeholder="Enter your search query..." 
+                required
+                autofocus
+            >
+            <button type="submit" class="search-button">Search</button>
+        </form>
+        
+        <div class="help-text">
+            <h3>How to use:</h3>
+            <p><strong>Boolean Operators:</strong></p>
+            <p><code>AND</code> - Find documents containing all terms</p>
+            <p><code>OR</code> - Find documents containing any term</p>
+            <p><code>NOT</code> - Exclude documents with certain terms</p>
+            <p style="margin-top: 15px;"><strong>Example queries:</strong></p>
+            <p><code>fallout AND vault</code></p>
+            <p><code>weapon OR armor</code></p>
+            <p><code>quest AND brotherhood NOT enclave</code></p>
+        </div>
+    </div>
+</body>
+</html>

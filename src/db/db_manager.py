@@ -16,26 +16,25 @@ class DatabaseManager:
         Initialize the database connection.
         
         Args:
-            config: Database configuration dict with keys:
-                   - host: MongoDB host
-                   - port: MongoDB port
-                   - database: Database name
-                   - username: Optional username
-                   - password: Optional password
+            config: Complete configuration dict including:
+                   - db: Database configuration
+                   - crawler: Crawler configuration (for crawler_id)
         """
         self.config = config
         self.client: Optional[MongoClient] = None
         self.db: Optional[Database] = None
         self.documents: Optional[Collection] = None
         self.crawl_state: Optional[Collection] = None
+        self.crawler_id = config.get('crawler', {}).get('crawler_id', 'main_crawler')
         
     def connect(self):
         """Establish connection to MongoDB."""
-        host = self.config.get('host', 'localhost')
-        port = self.config.get('port', 27017)
-        username = self.config.get('username')
-        password = self.config.get('password')
-        database = self.config.get('database', 'fallout_wiki')
+        db_config = self.config.get('db', {})
+        host = db_config.get('host', 'localhost')
+        port = db_config.get('port', 27017)
+        username = db_config.get('username')
+        password = db_config.get('password')
+        database = db_config.get('database', 'fallout_wiki')
         
         # Build connection string
         if username and password:
@@ -57,25 +56,37 @@ class DatabaseManager:
         
     def _create_indexes(self):
         """Create necessary indexes on collections."""
-        # Index on URL for fast lookups
-        self.documents.create_index([('url', ASCENDING)], unique=True)
+        # Composite unique index on (url, source_domain) - allows same URL from different sources
+        try:
+            self.documents.create_index(
+                [('url', ASCENDING), ('source_domain', ASCENDING)],
+                unique=True,
+                name='url_1_source_domain_1'
+            )
+        except Exception:
+            # Index may already exist
+            pass
         
         # Index on timestamp for age-based queries
         self.documents.create_index([('timestamp', ASCENDING)])
+        
+        # Index on source_domain for filtering by source
+        self.documents.create_index([('source_domain', ASCENDING)])
         
     def close(self):
         """Close the database connection."""
         if self.client:
             self.client.close()
             
-    def save_document(self, url: str, html: str, source: str = "Fallout Wiki") -> bool:
+    def save_document(self, url: str, html: str, source: str, source_domain: str) -> bool:
         """
         Save or update a document in the database.
         
         Args:
             url: Normalized URL of the document
             html: Raw HTML content
-            source: Source name (default: "Fallout Wiki")
+            source: Source name (e.g., "Fallout Fandom")
+            source_domain: Source domain (e.g., "fallout.fandom.com")
             
         Returns:
             True if document was saved/updated, False otherwise
@@ -84,13 +95,14 @@ class DatabaseManager:
             content_hash = self._compute_hash(html)
             timestamp = int(time.time())
             
-            # Use upsert to insert or update
+            # Use composite key (url, source_domain) for upsert
             self.documents.update_one(
-                {'url': url},
+                {'url': url, 'source_domain': source_domain},
                 {
                     '$set': {
                         'html': html,
                         'source': source,
+                        'source_domain': source_domain,
                         'timestamp': timestamp,
                         'content_hash': content_hash
                     }
@@ -103,23 +115,28 @@ class DatabaseManager:
             print(f"Error saving document {url}: {e}")
             return False
     
-    def get_document(self, url: str) -> Optional[Dict[str, Any]]:
+    def get_document(self, url: str, source_domain: str = None) -> Optional[Dict[str, Any]]:
         """
-        Retrieve a document from the database by URL.
+        Retrieve a document from the database by URL and optionally source_domain.
         
         Args:
             url: Normalized URL of the document
+            source_domain: Optional source domain filter
             
         Returns:
             Document dict or None if not found
         """
         try:
-            return self.documents.find_one({'url': url})
+            query = {'url': url}
+            if source_domain:
+                query['source_domain'] = source_domain
+            return self.documents.find_one(query)
         except Exception as e:
             print(f"Error getting document {url}: {e}")
             return None
     
-    def document_needs_update(self, url: str, new_html: str, max_age_days: int = 30) -> bool:
+    def document_needs_update(self, url: str, new_html: str, max_age_days: int = 30, 
+                             source_domain: str = None) -> bool:
         """
         Check if a document needs to be updated.
         
@@ -132,11 +149,12 @@ class DatabaseManager:
             url: Normalized URL of the document
             new_html: New HTML content to compare
             max_age_days: Maximum age in days before re-crawling
+            source_domain: Source domain to check
             
         Returns:
             True if document should be updated, False otherwise
         """
-        doc = self.get_document(url)
+        doc = self.get_document(url, source_domain)
         
         # Document doesn't exist, needs to be saved
         if not doc:
@@ -159,7 +177,7 @@ class DatabaseManager:
     
     def save_crawl_state(self, state: Dict[str, Any]):
         """
-        Save the current crawl state.
+        Save the current crawl state using crawler-specific ID.
         
         Args:
             state: State dict containing crawler position info
@@ -168,7 +186,7 @@ class DatabaseManager:
             state['last_updated'] = int(time.time())
             
             self.crawl_state.update_one(
-                {'_id': 'main_crawler'},
+                {'_id': self.crawler_id},
                 {'$set': state},
                 upsert=True
             )
@@ -177,21 +195,21 @@ class DatabaseManager:
     
     def get_crawl_state(self) -> Optional[Dict[str, Any]]:
         """
-        Retrieve the saved crawl state.
+        Retrieve the saved crawl state for this crawler.
         
         Returns:
             State dict or None if no state exists
         """
         try:
-            return self.crawl_state.find_one({'_id': 'main_crawler'})
+            return self.crawl_state.find_one({'_id': self.crawler_id})
         except Exception as e:
             print(f"Error getting crawl state: {e}")
             return None
     
     def clear_crawl_state(self):
-        """Clear the crawl state (start fresh)."""
+        """Clear the crawl state for this crawler (start fresh)."""
         try:
-            self.crawl_state.delete_one({'_id': 'main_crawler'})
+            self.crawl_state.delete_one({'_id': self.crawler_id})
         except Exception as e:
             print(f"Error clearing crawl state: {e}")
     
